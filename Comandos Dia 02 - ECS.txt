@@ -1,0 +1,200 @@
+
+# Verificar se as permissões (roles) foram assumidas pela EC2 do VSCode
+
+aws sts get-caller-identity | grep "VSCodeInstanceRole"
+
+
+# Verifique se o código para o Workshop foi baixado corretamente
+
+ls -l ~/ecs-cats-dogs
+
+
+# Vamos atualizar o AWS CLI e instalar algumas ferramentas
+
+sudo pip install --upgrade awscli
+sudo yum install -y jq
+
+
+# Vamos colocar algumas variáveis de ambiente que facilitarão a condução do workshop
+
+TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+export AWS_REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+echo "export AWS_REGION=${AWS_REGION}" | tee -a ~/.bash_profile
+aws configure set default.region ${AWS_REGION}
+
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+echo "export AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" | tee -a ~/.bash_profile
+
+
+
+# Maneira alternativa de se criar os repositórios pela AWS CLI no terminal
+
+aws ecr create-repository \
+--repository-name cats \
+--image-scanning-configuration scanOnPush=true \
+--region ${AWS_REGION}
+
+aws ecr create-repository \
+--repository-name dogs \
+--image-scanning-configuration scanOnPush=true \
+--region ${AWS_REGION}
+
+aws ecr create-repository \
+--repository-name web \
+--image-scanning-configuration scanOnPush=true \
+--region ${AWS_REGION}
+
+
+# Construir imagem cats
+
+source ~/.bash_profile
+cd ~/ecs-cats-dogs
+docker build -t cats . 
+
+# Construir as imagens dogs e web
+docker build -t dogs ~/ecs-cats-dogs/dogs/
+docker build -t web ~/ecs-cats-dogs/web/
+
+
+# Registro, TAG e push das imagens
+
+
+# CATS
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+docker tag cats:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/cats:latest
+docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/cats:latest
+
+
+# Dogs
+docker tag dogs:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/dogs:latest
+docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/dogs:latest
+
+
+# Web
+docker tag web:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/web:latest
+docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/web:latest
+
+
+
+# comandos para Queries no CloudWatch Logs Insights
+stats avg(CpuUtilized), avg(MemoryUtilized) by bin (30m) as period, TaskDefinitionFamily, TaskDefinitionRevision 
+| filter Type = "Task" | sort period desc, TaskDefinitionFamily
+
+
+field @timestamp, TaskId, TaskDefinitionFamily, CpuUtilized, CpuReserved, MemoryUtilized, MemoryReserved, StorageReadBytes, StorageWriteBytes
+| filter (Type = "Task" and TaskDefinitionFamily = "webdef")
+| sort @timestamp
+| limit 20
+
+
+# Comandos para instalação do hey no servidor do VSCode.
+
+wget https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64
+chmod 755 hey_linux_amd64
+sudo mv hey_linux_amd64 /usr/local/bin/hey
+
+# Para executar o teste de carga
+
+hey -z 5m http://<Your ALB DNS name>/
+
+
+
+#### CI / CD
+
+# Instalar o gh - ferramenta de gerenciamento do GitHub
+
+sudo dnf install 'dnf-command(config-manager)' -y
+sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+sudo dnf install gh --repo gh-cli -y
+
+# faça login na sua conta
+gh auth login
+
+# Criar o repositório dogs
+gh repo create dogs --public
+
+# Clone o repositório
+cd
+git clone https://github.com/<your_github_id>/dogs
+
+
+# Copie o conteúdo original do dogs para o repositório
+cd ~/dogs
+cp ~/ecs-cats-dogs/dogs/* ./
+git add .
+git commit -m "initial commit"
+git push
+
+
+# Carregar o buildspec.yml no repositório
+cd ~/dogs
+git add .
+git commit -m "buildspec.yml add"
+git push
+
+
+
+# Teste do deploy, após modificar a index.html
+git add .
+git commit -m "add buildspec and dogs-version2"
+git push
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# De-registrar task definitions
+aws ecs deregister-task-definition --task-definition nome_da_task:numero_da_revisao
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+	
