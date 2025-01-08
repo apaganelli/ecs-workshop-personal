@@ -1,3 +1,7 @@
+Workshop - Cats & Dogs
+Dia 02 - ECR + ELB + ECS + CI/CD
+Comandos a serem executados durante o workshop.
+
 
 # Verificar se as permissões (roles) foram assumidas pela EC2 do VSCode
 
@@ -141,43 +145,7 @@ git commit -m "add buildspec and dogs-version2"
 git push
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# De-registrar task definitions
+# De-registrar task definitions antigas pelo CLI
 aws ecs deregister-task-definition --task-definition nome_da_task:numero_da_revisao
 
 
