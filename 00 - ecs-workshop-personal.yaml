@@ -2,10 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'ECS Cats and Dogs Prerequisite - Network CloudFormation Template'
 Mappings:
   CidrMappings:
-    private-subnet-1: {CIDR: 10.0.3.0/24}
-    private-subnet-2: {CIDR: 10.0.4.0/24}
     public-subnet-1: {CIDR: 10.0.1.0/24}
     public-subnet-2: {CIDR: 10.0.2.0/24}
+    private-subnet-1: {CIDR: 10.0.3.0/24}
+    private-subnet-2: {CIDR: 10.0.4.0/24}
     vpc: {CIDR: 10.0.0.0/16}
   DomainNameMappings:
     eu-west-1: {Domain: eu-west-1.compute.internal}
@@ -200,6 +200,14 @@ Resources:
           FromPort: 8080
           ToPort: 8080
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIP: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIP: 0.0.0.0/0
       VpcId: {Ref: VPC}
   
   VSCodeInstanceRole:
@@ -230,12 +238,8 @@ Resources:
   VSCodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      #RoleName: AdminInstanceProfile
       Roles:
         - !Ref VSCodeInstanceRole
-      #Tags:
-      #  - Key: Name
-      #    Value: AdminProfile
 
   VSCodeServerInstance:
     Type: AWS::EC2::Instance
@@ -285,12 +289,16 @@ Resources:
           su - ec2-user -c 'nohup code-server &'
           chown -R ec2-user:ec2-user /home/ec2-user/.config
 
-          echo "####################################################################################################"
-          echo "Trying to install kubectl"
-          dnf update -y && rm -rf /var/lib/rpm/.rpm.lock
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x ./kubectl
-          mv ./kubectl /usr/local/bin
+          echo "###################################################################################################"
+          echo "Accepting connections on port 80 and redirecting to port 8080"
+          sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080
+          
+          #echo "####################################################################################################"
+          #echo "Trying to install kubectl"
+          #dnf update -y && rm -rf /var/lib/rpm/.rpm.lock
+          #curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          #chmod +x ./kubectl
+          #mv ./kubectl /usr/local/bin
 
           echo "####################################################################################################"
           echo "git clone ECS workshop code"
@@ -303,11 +311,11 @@ Resources:
           echo "alias ll='ls -la'" >> /home/ec2-user/.bash_profile
           echo "alias h='history'" >> /home/ec2-user/.bash_profile
           echo "alias rm='rm -i'" >> /home/ec2-user/.bash_profile
-          echo "alias k='kubectl'" >> /home/ec2-user/.bash_profile
+          #echo "alias k='kubectl'" >> /home/ec2-user/.bash_profile
 Outputs:
   VSCodeServerURL:
     Description: URL to access the VS Code server
-    Value: !Sub 'http://${VSCodeServerInstance.PublicDnsName}:8080'
+    Value: !Sub 'http://${VSCodeServerInstance.PublicDnsName}'
   VSCodePassword:
     Description: VS CodeServer Password
     Value: !Ref VSCodeServerPassword
@@ -330,25 +338,3 @@ Outputs:
     Description: The CIDR block of the VPC.
     Value:
       Fn::FindInMap: [CidrMappings, vpc, CIDR]
-
-  # Workstation:
-  #   Type: AWS::EC2::Instance
-  #   Properties:
-  #     DisableApiTermination: 'false'
-  #     InstanceInitiatedShutdownBehavior: stop
-  #     ImageId: ami-0bfec29e923df9531
-  #     InstanceType: t2.micro
-  #     Monitoring: 'false'
-  #     KeyName: {Ref: myKeyPair}
-  #     IamInstanceProfile: {Ref: "WorkstationProfile"}
-  #     Tags:
-  #       - Key: Name
-  #         Value: Workstation
-  #     NetworkInterfaces:
-  #       - AssociatePublicIpAddress: 'true'
-  #         DeleteOnTermination: 'true'
-  #         Description: 'Primary network interface'
-  #         DeviceIndex: 0
-  #         SubnetId: {Ref: PublicSubnet1}  
-  #         GroupSet: 
-  #           - Ref: "WorkstationSG"
